@@ -1,0 +1,441 @@
+#############################################
+##############CrossTab#######################
+#############################################
+#simple crosstab without library
+crosstab=read.csv("CrossTab_Example.csv", header=TRUE)
+table_check=table(crosstab[,2],crosstab[,3])
+chisq.test(table_check)
+
+#with library
+library(gmodels)
+CrossTable(crosstab[,3],crosstab[,2],,chisq=TRUE,expected=TRUE,dnn=c("Recom","AcctSize"))
+
+
+#############################################
+##############Correlation Analysis###########
+#############################################
+#Without Library
+corr=read.csv("Correlation_Example.csv" , header=TRUE)
+price<-corr[,2]
+sales<-corr[,3]
+cor(price,sales)
+
+#with library and statistical testing
+library(Hmisc)
+rcorr(cbind(price,sales),type="pearson")
+
+
+#############################################
+##############Simple Linear Regression#######
+#############################################
+sat.df<-read.csv("http://goo.gl/HKnl74")
+attach(sat.df)
+m1=lm(overall~rides)
+summary(m1)
+#residual plot
+plot(m1$fitted.values,m1$residuals)
+#prediction
+newdata=data.frame(rides=95)
+predict(m1,newdata)
+#confidence interval
+confint(m1)
+
+#other useful command
+#log transformation
+sat.df$logdist<-log(sat.df$distance) 
+head(sat.df)
+hist(sat.df$logdist)
+#mixed correlation plot
+library(corrplot)
+corrplot.mixed(cor(sat.df[,c(2,4:9)]),upper="ellipse")
+
+
+#############################################
+##########multiple linear regression#########
+#############################################
+m2<-lm(overall~rides+games+wait+clean, data=sat.df)
+summary(m2)
+
+#find a better model
+sat.std<-sat.df[,-3]#take out the distance
+sat.std[,3:8]<-scale(sat.std[,3:8])#data normalization
+m2_1<-lm(overall~rides+games+wait+clean+weekend+logdist+num.child, data=sat.std)
+summary(m2_1)
+
+#change the num of child as categorical, dummy coding
+sat.std$num.child.factor<-factor(sat.std$num.child)
+is.factor(sat.std$num.child.factor)
+m2_2<-lm(overall~rides+games+wait+clean+weekend+logdist+num.child.factor, data=sat.std)
+summary(m2_2)
+
+#model with binary has.child variable
+sat.std$has.child<-factor(sat.std$num.child>0)
+m2_3<-lm(overall~rides+games+wait+clean+weekend+logdist+has.child, data=sat.std)
+summary(m2_3)
+
+#comparison
+AIC(m2);AIC(m2_1);AIC(m2_2);AIC(m2_3)
+BIC(m2);BIC(m2_1);BIC(m2_2);BIC(m2_3)
+
+
+#############################################
+##########interaction term###################
+#############################################
+m7<-lm(overall~rides+games+wait+clean+has.child
+       +wait:has.child, data=sat.std)
+summary(m7)
+
+
+#############################################
+##########variable selection#################
+#############################################
+Discover=read.csv("Discover_step.csv",head=TRUE)
+library(MASS)
+fit<-lm(q4~.,data=Discover[,-1])
+#remove 1st column for "id"
+summary(fit)
+
+step_both<-stepAIC(fit, direction="both")
+summary(step_both)
+
+step_back<-stepAIC(fit,direction="backward")
+summary(step_back)
+
+
+#############################################
+##########Logistic Regression################
+#############################################
+catalog<-read.csv('Catalog.csv',head=TRUE)
+attach(catalog)
+res_catalog<-glm(Choice~Recency+Frequency+Monetary,family = binomial("logit"))
+summary(res_catalog)
+
+#prediction
+n=dim(catalog)[1] 
+pred=predict.glm(res_catalog, catalog, type="response")
+pred.c=rep(0,n)
+pred.c[pred>0.5]=1
+table(catalog[,5],pred.c)
+
+#prediction for new data
+newdata1=data.frame(4,9,66.71)
+colnames(newdata1)=c('Recency','Frequency',"Monetary")
+predict(res_catalog, newdata1, type="link") #log odds, ln(p(y)/1-p(y))
+predict(res_catalog,newdata1,type="response") #p(y)
+
+#given log odds ratio, calculate probability
+xbeta=-10
+plogis(-10)
+plogis(-Inf) #0, here, plogis=exp(x)/exp(x)+1
+plogis(0)#0.5
+
+#given probability, calculate log odds ratio
+log(.88/(1-0.88))
+qlogis(.88)#function for logit
+
+#train and validation example
+#bank marketing data
+bank=read.csv("bank-additional-full.csv", head=TRUE)
+dim(bank)[1]#41188
+train.prop=0.75 
+train.cases=sample(nrow(bank),nrow(bank)*train.prop)
+length(train.cases)#30891
+
+class.train=bank[train.cases,c(1,3,6,11,14,21)]
+class.valid=bank[-train.cases,c(1,3,6,11,14,21)]
+
+#categorical
+class.train$marital<-as.factor(class.train[,2])
+class.train$housing<-as.factor(class.train[,3])
+n=dim(x.train)[1]  #30891
+fit.logit<-glm(y~age+marital+housing+duration,
+               data=class.train,
+               family = binomial("logit"))
+#prediction
+pred.train=predict(fit.logit,class.train[,-6],type='response')
+pred.train<-ifelse(pred.train>0.5,1,0)
+y.train=class.train[,6]
+(ct=table(y.train,pred.train))
+diag(prop.table(ct,1))#to see hit rate
+sum(diag(prop.table(ct)))
+
+#valid data set - prediction hitting for external examples
+class.valid$marital<-as.factor(class.valid[,2])
+class.valid$housing<-as.factor(class.valid[,3])
+pred.valid=predict(fit.logit, class.valid[,-6],type='response')
+pred.valid<-ifelse(pred.valid>0.5,1,0)
+(ctv=table(class.valid[,6],pred.valid))
+diag(prop.table(ctv,1))#to see hit rate
+sum(diag(prop.table(ctv)))
+
+#crosstab---jaccard similarity
+table(bank[,21])/dim(bank)[1] #unbanlanced dataset
+crosstv=table(class.valid[,6], pred.valid)
+crosstv[2,2]/(dim(class.valid)[1]-crosstv[1,1])
+
+
+#############################################
+##########BASS Difussion Model###############
+#############################################
+iphone_data=read.csv("sample_iphone_sales.csv", header=TRUE)
+#cumulative sales
+y=cumsum(sales)
+y=c(0,y[1:length(y)-1])#we want y_t-1 instrad of y_t(cumulative sales) to match with sales
+ysq=y^2
+out=lm(sales~y+ysq) #s(t)=a+by(t)+cy(t)^2
+summary(out)
+
+a=out$coef[1]
+b=out$coef[2]
+c=out$coef[3]
+
+mplus=(-b+sqrt(b^2-4*a*c))/(2*c) #it doesn't make sense of m is negative
+mminus=(-b-sqrt(b^2-4*a*c))/(2*c)
+m=mminus
+p=a/m
+q=b+p
+
+#external effect
+ext=NULL
+length(y)
+#p*[m-y(t)] is the enternal effect
+for (t in 1:length(y)){ext<-c(ext,p*(m-y[t]))} #see this in PPT
+plot(ext,type='l')
+
+#internal effect
+int=NULL
+for (t in 1:length(y)){int<-c(int,q*(y[t]/m)*(m-y[t]))}
+plot(int,type="l")
+
+
+#############################################
+##########Factor Analysis####################
+#############################################
+library(nFactors)
+library(Hmisc)
+library(GPArotation)
+factor.bank=read.csv("Bank.csv", head=TRUE)
+nScree(factor.bank[,2:6])
+#keep all factors with eigenvalue>1
+eigen(cor(factor.bank[,2:6]))
+factanal(factor.bank[,2:6], factors=2, rotation="varimax")
+#rotation "oblique" -- allow correlation between factors
+(bank_res<-factanal(factor.bank[,2:6], factors=2, rotation="oblimin"))
+#factor scores
+factor_res=factanal(factor.bank[,2:6], factors=2, scores="Bartlett")
+dim(factor_res$scores)
+head(factor_res$scores)
+
+x=as.matrix(factor.bank[,2:6])
+fx=as.matrix(factor_res$scores)
+Y=factor.bank[,7]
+
+summary(lm(Y~x))
+summary(lm(Y~fx))
+
+
+#######################################################
+#Perceptual Mapping in PCA(principal component analysis
+#######################################################
+brand.ratings <- read.csv("http://goo.gl/IQl8nc")
+brand.sc<-brand.ratings
+brand.sc[,1:9]<-scale(brand.ratings[,1:9])
+#PCA
+#Eigen values = (Standard deviation)2
+brand.pc<-prcomp(brand.sc[,1:9])#PCA, use pc1, pc2 has eigen value larger than 1
+summary(brand.pc)
+
+#PCA with package
+library(FactoMineR)
+res.pca<-PCA(brand.sc,quali.sup=10)#PCA analysis in FactoMineR
+res.pca$eig
+#compute mean across 10 brands
+brand.mean<-aggregate(brand.sc[,1:9],list(brand.sc[,10]),mean)
+brand.mean1<-brand.mean[,-1]#exclude brand column
+rownames(brand.mean1)<-letters[1:10]#change row names
+brand.mu.pc<-prcomp(brand.mean1,scale=TRUE)
+summary(brand.mu.pc)
+
+#MDS by cmdscale
+brand.dist<-dist(brand.mean1)
+(brand.mds<-cmdscale(brand.dist))
+#cmdscale:classical multidimensional scaling of a data matrix
+#compute using distances
+plot(brand.mds,type="n")
+rownames(brand.mds)<-paste("",letters,sep = "")[1:10]#change row name
+text(brand.mds,rownames(brand.mds),cex=1)
+
+#-------------------------------------
+#infiniti example
+infiniti=read.csv("Infiniti.csv",head=TRUE)
+infi=infiniti[,-1]
+infi.dist<-dist(infi)#measure distance matrix between features
+(infi.mds<-cmdscale(infi.dist))
+plot(infi.mds,type="n")#n means none ploting
+(rownames(infi.mds)<-as.character(infiniti[,1]))#change row names
+#cex is the size of words
+text(infi.mds,rownames(infi.mds),cex=0.7)
+
+#using FactoMineR package
+infiniti.pca<-PCA(infiniti,quali.sup=1)#PCA analysis in FactoMineR
+
+
+###########################################
+######### Discriminant Analysis ###########
+############################################
+library(MASS)
+library(ggplot2)
+library(gmodels)
+library(klaR)
+set.seed(100) 
+export <- read.csv("Clients.csv",head=TRUE)
+Class <- as.factor(export[,1])
+#make the assumption normal distribution work
+#lda is just for continuous IV
+X.size=scale(export[,2]); X.rev=scale(export[,3]);
+X.year=scale(export[,4]); X.prod=scale(export[,5]);
+#linear discrimilator analysis
+#The discriminant weights (bi) are chosen so as to maximize the 
+#ratio of the between-group variance relative to the within-group variance
+fit.lda<- lda(Class ~ X.size + X.rev + X.year + X.prod)
+fit.lda
+
+#calculate the cutoff value
+low=which(Class==0) #which are 0 for DV
+high=which(Class==1)
+length(low) #sample size for the Class=0,38
+dim(export)
+#prior probability of class =0, 0.633
+length(low)/dim(export)[1]
+#fit.lda$scaling is the coefficient
+fit.lda$scaling
+#mean of size when class=0, -0.23226
+mean(X.size[low])#check this in fit.lda results
+#Example: compute low Z mean score... -0.38045
+mean(X.size[low]*fit.lda$scaling[1]
+     +X.rev[low]*fit.lda$scaling[2]
+     +X.year[low]*fit.lda$scaling[3]
+     +X.prod[low]*fit.lda$scaling[4]) ##Z score for Low
+#compute the high z mean score 0.657
+mean(X.size[high]*fit.lda$scaling[1]
+     +X.rev[high]*fit.lda$scaling[2]
+     +X.year[high]*fit.lda$scaling[3]
+     +X.prod[high]*fit.lda$scaling[4]) ##Z score for Low
+#cutoff value = (38*0.38+22*0.65)/(38+22) = 0.277
+#group mean, which are used to calculate the cutoff value
+#if the value in the equation is larger than the Zcutoff value, 
+#then it is the class 1
+
+# for prediction
+fit.lda1 = predict(fit.lda)
+fit.lda1$class
+#Class is y in original dataset
+(ct<-table(Class, fit.lda1$class)) #classification table
+#need to use gmodel to get CrossTable function
+table<-CrossTable(Class, fit.lda1$class)
+#jaccard m11/m11+m10+m01, hit rate = accuracy = 0.7
+ct[2,2]/(ct[2,2]+ct[1,2]+ct[2,1])
+
+#-----------------------------------QDA
+fit.qda<- qda(Class ~ X.size + X.rev + X.year + X.prod)
+fit.qda1 = predict(fit.qda)
+#accuracy is 0.75
+(ct<-table(Class, fit.qda1$class)) #classification table
+CrossTable(Class, fit.qda1$class)
+
+
+###########################################
+#########Bayes classifier##################
+###########################################
+set.seed(100)
+library(e1071)
+seg.raw <- read.csv("http://goo.gl/qw303p")
+train.prop = 0.65
+train.cases = sample(nrow(seg.raw), nrow(seg.raw)*train.prop)
+length(train.cases); #195
+#get the trained dataset and validation dataset
+seg.df.train=seg.raw[train.cases,]
+seg.df.valid=seg.raw[-train.cases,]
+seg.nb <- naiveBayes(Segment ~ ., data=seg.df.train)
+seg.nb.class <- predict(seg.nb, seg.df.valid) #predict for valid set
+mean(seg.df.valid$Segment==seg.nb.class) # prediciton hit rate, accuracy,0.77
+#Cross-Tab
+table(seg.df.valid$Segment, seg.nb.class)
+
+### 3. bank data ###
+bank=read.csv("bank-additional-full.csv", head=TRUE)
+train.prop = .75 #set 75% for training dataset
+train.cases = sample(nrow(bank), nrow(bank)*train.prop)
+length(train.cases); 
+##using age, marital, housing, duration, previous
+class.train=bank[train.cases,c(1,3,6,11,14,21)]
+class.valid=bank[-train.cases,c(1,3,6,11,14,21)]
+#make those two variables as the dummy variable
+class.train$marital<-as.factor(class.train[,2])
+class.train$housing<-as.factor(class.train[,3])
+set.seed(100)
+#run naive Bayes classifier with training data
+seg.nb <- naiveBayes(y ~ age+housing,data=class.train)
+pred.nb <- predict(seg.nb, class.valid) 
+#pred.nb <- ifelse(pred.nb=="yes",1,0)
+bayes_t=table(pred.nb,class.valid$y) #frequency table
+#jaccard similarity index
+CrossTv=table(class.valid$y, pred.nb)
+CrossTv[2,2]/(dim(class.valid)[1]-CrossTv[1,1]) 
+
+
+###########################################
+#########CART Modeling (rpart) ############
+###########################################
+library(rpart)
+set.seed(100)
+#### 1. in-class IT investment example ###
+#export <- read.csv("Clients.csv",head=TRUE)
+#Class <- as.factor(export[,1])
+CART_fit.inv <- rpart(Class ~ X.size + X.rev + X.year + X.prod,
+                      method="class") #when y is factor
+printcp(CART_fit.inv) # display the results 
+summary(CART_fit.inv) # detailed summary of splits
+
+# prediction
+pred.rpart=predict(CART_fit.inv , type = "class")
+#accuracy is 0.783
+table(Class,pred.rpart)
+corsstable=CrossTable(Class,pred.rpart)
+plot(CART_fit.inv, uniform=TRUE, 
+     main="Investment Classification Tree")
+text(CART_fit.inv, use.n=TRUE, all=TRUE, cex=.8)
+#jaccard is 0.55
+CrossTv=table(Class,pred.rpart)
+CrossTv[2,2]/(dim(export)[1]-CrossTv[1,1])
+
+
+####################################
+### Random Forest Classificaiton ###
+####################################
+library(randomForest);
+set.seed(100)
+#seg.raw <- read.csv("http://goo.gl/qw303p")
+#train.prop = 0.65
+#train.cases = sample(nrow(seg.raw), nrow(seg.raw)*train.prop)
+#length(train.cases); #195
+#seg.df.train=seg.raw[train.cases,]
+#seg.df.valid=seg.raw[-train.cases,]
+#### 2. textbook data example ####
+seg.rf <- randomForest(Segment ~., data=seg.df.train, ntree=1000)
+seg.rf.class.all<-predict(seg.rf, seg.df.valid, predict.all=TRUE)
+n=dim(seg.df.valid)[1]
+seg.rf.class<-seg.rf.class.all$aggregate #predicted classification
+table(seg.df.valid$Segment,seg.rf.class) # prediction
+CrossTable(seg.df.valid$Segment, seg.rf.class)
+clusplot(seg.df.valid[,-7], seg.rf.class,color=TRUE, shade=TRUE,
+         labels=4, lines=0, main="Random Forest, holdout data")
+
+seg.rf <- randomForest(Segment ~., data=seg.df.train, ntree=1000,
+                       importance=TRUE)
+importance(seg.rf,type=1)#important variables
+varImpPlot(seg.rf, main="Variable importance by segment")
+
+
+
+
