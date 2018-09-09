@@ -1,0 +1,40 @@
+#########################################################################################################################################
+# Decision Trees
+install.packages("tree")
+library("tree")
+install.packages("party")
+library("party")
+
+#training
+stree = tree(Species ~ ., data = iris)
+stree
+
+plot(stree)
+text(stree)
+
+#mention that the split should be done based on the gini index
+stree = tree(Species ~ ., data = iris, split = "gini")
+stree
+
+plot(stree)
+text(stree)
+
+
+# Training and Testing, all of the 150 is from the original dataset
+test_sample = sample(1:150, 50)
+test_data = iris[test_sample, ]
+
+
+training_data = iris[-test_sample, ]
+fit_tree = tree(iris.type ~ ., data = training_data)
+test_predictions = predict(fit_tree, test_data, type = "class")
+test_error = sum(test_predictions != test_data$iris.type)/nrow(test_data)
+test_error
+training_error = sum(predict(fit_tree, type = "class") != training_data$iris.type)/nrow(training_data)
+training_error
+
+
+##
+iris_ctree <- ctree(Species ~ Sepal.Length + Sepal.Width + Petal.Length + Petal.Width, data=iris)
+plot(iris_ctree)
+plot(iris_ctree, type="simple")
