@@ -1,0 +1,64 @@
+# Logistic Regression
+# Libraries
+install.packages("dplyr")
+install.packages("ggplot2")
+
+
+library('dplyr')
+library('ggplot2')
+
+# loading data
+data(iris)
+head(iris)
+
+
+
+iris.small <- filter(iris, Species %in% c("virginica", "versicolor"))
+
+
+# train the model 
+glm.out <- glm(Species ~ Sepal.Width + Sepal.Length + Petal.Width + Petal.Length,
+               data = iris.small,
+               family = binomial) # family = binomial required for logistic regression
+summary(glm.out)
+
+#how to remove the variables, prediction in the model
+glm.out <- glm(Species ~ Sepal.Width + Petal.Width + Petal.Length,
+               data = iris.small,
+               family = binomial)
+
+#plot the sigmoid curve
+lr_data <- data.frame(predictor=glm.out$linear.predictors, prob=glm.out$fitted.values, Species=iris.small$Species)
+ggplot(lr_data, aes(x=predictor, y=prob, color=Species)) + geom_point()
+
+
+#we are creating the testing data points
+plant1 <- data.frame(Sepal.Length=6.2, Sepal.Width=2, Petal.Length=4.7, Petal.Width=2)
+plant2 <- data.frame(Sepal.Length=6.3, Sepal.Width=2.5, Petal.Length=4.6, Petal.Width=1.7)
+plant3 <- data.frame(Sepal.Length=6.9, Sepal.Width=3.4, Petal.Length=5.6, Petal.Width=2.1)
+
+#we are predicting the points
+predict(glm.out, plant1, type="response")
+predict(glm.out, plant2, type="response")
+predict(glm.out, plant3, type="response")
+
+
+
+cutoff <- 0
+virg_true <- sum(lr_data$predictor > cutoff & lr_data$Species=="virginica") 
+virg_false <- sum(lr_data$predictor <= cutoff & lr_data$Species=="virginica") 
+virg_true
+virg_false
+
+
+
+
+vers_true <- sum(lr_data$predictor <= cutoff & lr_data$Species=="versicolor") 
+vers_false <- sum(lr_data$predictor > cutoff & lr_data$Species=="versicolor") 
+vers_true
+vers_false
+
+tp <- virg_true/(virg_true + virg_false)
+tn <- vers_true/(vers_true + vers_false)
+tp
+tn
