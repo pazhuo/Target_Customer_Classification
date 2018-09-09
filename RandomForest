@@ -1,0 +1,180 @@
+
+setwd("C://Users//cheta//OneDrive//Documents//R//Workspace")
+
+
+library('vtreat')
+library('caret')
+library('gbm')
+
+
+Input_Set <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//591_Bank_Dataset_Input.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+Test_Set <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//591_Bank_Dataset_Test.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+cat_vars <- names(Input_Set)[grepl('_cat$', names(Input_Set))]
+Input_Set[,cat_vars] <- lapply(Input_Set[,cat_vars] , factor)
+
+cat_vars <- names(Test_Set)[grepl('_cat$', names(Test_Set))]
+Test_Set[,cat_vars] <- lapply(Test_Set[,cat_vars] , factor)
+# parallel for vtreat
+ncores <- parallel::detectCores()
+parallelCluster <- parallel::makeCluster(ncores)
+
+
+
+yName <- 'y_cat'
+yTarget <- 'yes'
+varNames <- setdiff(colnames(Input_Set),yName)
+
+system.time({
+  cd <- vtreat::mkCrossFrameCExperiment(Input_Set,varNames,yName,yTarget,
+                                        parallelCluster=parallelCluster)
+  scoreFrame <- cd$treatments$scoreFrame
+  dTrainTreated <- cd$crossFrame
+  # pick our variables
+  newVars <- scoreFrame$varName[scoreFrame$sig<1/nrow(scoreFrame)]
+  dTestTreated <- vtreat::prepare(cd$treatments,Test_Set,
+                                  pruneSig=NULL,varRestriction=newVars)
+})
+
+#write.csv(dTestTreated,"Train.csv")
+
+system.time({
+  yForm <- as.formula(paste(yName,paste(newVars,collapse=' + '),sep=' ~ '))
+  # from: http://topepo.github.io/caret/training.html
+  fitControl <- trainControl(## 10-fold CV
+    method = "repeatedcv",
+    number = 3, repeats = 3)
+  model <- caret::train(yForm,
+                        data = dTrainTreated,
+                        method = "cv",
+                        trControl = fitControl, metric="Recall")
+  print(model)
+  Test_Set$pred <- predict(model,newdata=dTestTreated,type='prob')[,yTarget]
+})
+
+Test_Set$preds <- ifelse(Test_Set$pred > 0.40,1,0)
+
+table(Test_Set$y_cat,Test_Set$preds)
+
+
+#******************************
+library(mlr)
+library(gbm)
+
+
+Input_Set <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//591_Bank_Dataset_Input.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+Test_Set <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//591_Bank_Dataset_Test.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+cat_vars <- names(Input_Set)[grepl('_cat$', names(Input_Set))]
+Input_Set[,cat_vars] <- lapply(Input_Set[,cat_vars] , factor)
+
+cat_vars <- names(Test_Set)[grepl('_cat$', names(Test_Set))]
+Test_Set[,cat_vars] <- lapply(Test_Set[,cat_vars] , factor)
+
+
+Train <- createDataPartition(Input_Set$y_cat, p=0.8, list=FALSE)
+training <- Input_Set[ Train, ]
+testing <- Input_Set[ -Train, ]
+
+getParamSet("classif.gbm")
+g.gbm <- makeLearner("classif.gbm", predict.type = "response")
+rancontrol <- makeTuneControlRandom(maxit = 10L)
+set_cv <- makeResampleDesc("CV",iters = 3L)
+gbm_par<- makeParamSet(
+  makeDiscreteParam("distribution", values = "bernoulli"),
+  makeIntegerParam("n.trees", lower = 100, upper = 1000), #number of trees
+  makeIntegerParam("interaction.depth", lower = 2, upper = 10), #depth of tree
+  makeIntegerParam("n.minobsinnode", lower = 10, upper = 80),
+  makeNumericParam("shrinkage",lower = 0.01, upper = 1)
+)
+
+#create a task
+trainTask <- makeClassifTask(data = training,target = "y_cat")
+testTask <- makeClassifTask(data = testing, target = "y_cat")
+
+tune_gbm <- tuneParams(learner = g.gbm, task = trainTask,resampling = set_cv,measures = mmce,par.set = gbm_par,control = rancontrol)
+
+tune_gbm$y
+final_gbm <- setHyperPars(learner = g.gbm, par.vals = tune_gbm$x)
+to.gbm <- train(final_gbm, trainTask)
+pr.gbm <- predict(to.gbm, testTask)
+misClasificError <- mean(pr.gbm$data$truth != pr.gbm$data$response)
+print(paste('Accuracy',1-misClasificError))
+confusionMatrix(pr.gbm$data$truth,pr.gbm$data$response)
+
+
+#top_task <- filterFeatures(trainTask, method = "randomForest.importance", abs=20)
+
+#to.gbm <- train(final_gbm, top_task)
+#pr.gbm <- predict(to.gbm, testTask)
+#misClasificError <- mean(pr.gbm$data$truth != pr.gbm$data$response)
+#print(paste('Accuracy',1-misClasificError))
+
+
+
+
+setwd("C://Users//cheta//OneDrive//Documents//R//Workspace")
+library(caret)
+library(randomForest)
+Input_Set_Caret <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//MKT_Project//Input_Set_Caret.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+Input_Set <-
+  read.csv(
+    "C://Users//cheta//OneDrive//Documents//R//Inputs//MKT_Project//Input_Set.csv",
+    header = T,
+    na.strings = ("")
+  )
+
+
+idx.train <- createDataPartition(y = Input_Set$y_cat, p = 0.8, list = FALSE) 
+train <- Input_Set[idx.train, ]
+test <-  Input_Set[-idx.train, ] 
+idx.validation <- createDataPartition(y = test$y_cat, p = 0.25, list = FALSE) 
+validation <- test[idx.validation, ]
+test <- test[-idx.validation, ] 
+
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+set.seed(100)
+mtryGrid <- expand.grid(mtry=c(5,10,7,6,3,4,2,9)) # you can put different values for mtry
+rfTune<- train(y_cat~., data=validation,
+               method = "rf",
+               metric = "Kappa",
+               ntree = 1000,
+               tuneGrid = mtryGrid,
+               importance = TRUE,
+               trControl=control)
+print(rfTune)
+plot(rfTune)
+
+rfModel <- randomForest(y_cat~., data = train, importance = TRUE, mtry=rfTune$bestTune$mtry, ntree = 1000)
+predTest <- predict(rfModel, test, type = "prob")
+predictions <- ifelse(predTest[,1] > 0.65,"no","yes")
+confusionMatrix(predictions, test$y_cat)
